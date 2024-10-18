@@ -4,7 +4,7 @@ global type = "phase1_ss"
 global true = 0
 
 // PUT ALL ESTIMATE FILES TOGETHER AND SAVE TO THE MAIN RESULTS
-global doDir "H:\mtchdcohortsim"
+global doDir "H:\mtchdcohortsim_paper"
 global resultsDir "H:\mtchdcohortsim\Main_RESULTS"
 global rawDir "H:\mtchdcohortsim\hpc\Output_hrss_03OCT2024"
 
