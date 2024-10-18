@@ -1,6 +1,6 @@
 ///SETUP///
 
-global resultsDir "H:\mtchdcohortsim_paper"
+global resultsDir "H:\mtchdcohortsim_paper\Do-files"
 
 cap log using "$resultsDir\simsum_onerep", replace
 
