@@ -1,6 +1,8 @@
 #mtchdcohortsim_paper:
 
-To run simulation: see hpc_submit folder (One job = 50 repetitions)
+To run full simulation: see hpc_submit folder (One job = 50 repetitions).
+
+To run on repetition of the simulation: Run Do-Files/sim_onerep.do
 
 To run performance measures on your computer:
 Load dta file: sim_estimates_2000_phase1_ss.dta into Main_RESULTS folder
