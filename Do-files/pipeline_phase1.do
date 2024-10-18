@@ -4,18 +4,19 @@ global type = "phase1_ss"
 global true = 0
 
 // PUT ALL ESTIMATE FILES TOGETHER AND SAVE TO THE MAIN RESULTS
-global doDir "H:\mtchdcohortsim_paper"
+global doDir "H:\mtchdcohortsim_paper\Do-files"
 global resultsDir "H:\mtchdcohortsim\Main_RESULTS"
 global rawDir "H:\mtchdcohortsim\hpc\Output_hrss_03OCT2024"
 
 
-//ONLY RUN IF YOU NEED THE RAW ACCESS FILES//
+/*
+//ONLY RUN IF YOU HAVE THE RAW ACCESS FILES//
 
 clear 
 
 cd $doDir
 do sim_combine_estimates.do
-
+/*
 //ESTIMATES DATASET:
 use "$resultsDir\sim_estimates_${nsim}_${type}", clear
 
