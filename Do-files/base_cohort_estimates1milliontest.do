@@ -1,11 +1,14 @@
 
-//I also think we can empirically estimate the matched estimands by generating eg a million exposed people, duplicating them and jittering the age of one (who becomes unexposed), and then generating outcomes assuming one is exposed and the other not.  We delete pairs where the exposed is simulated an outcome time prior to exposure and regenerate outcomes for unexposed that are before. I think that works. I'll try and see. It will be reassuring if these estimates then correspond to what we've been using
+//I also think we can empirically estimate the matched estimands by generating eg a million exposed people, duplicating them and jittering the age of one (who becomes unexposed), and then generating outcomes assuming one is exposed and the other not.  We delete pairs where the exposed is simulated an outcome time prior to exposure and regenerate outcomes for unexposed that are before. I think that works. I'll try and see. It will be reassuring if these estimates then correspond to what we've been using.
 
+set rng mt64s
+set rngstream 1
 set seed 88
 
-clear
-set obs 100000
+/////////////////////////GENERATE 1 MILLION EXPOSED PEOPLE///////////////////////////
 
+clear
+set obs 1000000
 
 //generate a patid
  gen patid= _n
@@ -13,7 +16,6 @@ set obs 100000
 //generate age (based on UK population)
  gen age_start = rnormal(40, 12)
 *drop if age_start <18 // KA note: tmporarily removed to check if removing less people works better
-
 
 //generate gender. Recoded 1 & 2 to fit getmatched cohort program,
  gen gender = runiform()<=0.5
@@ -51,11 +53,11 @@ gen yob= year(dob)
 gen total_time = (latest_date-startdate)/365.25
 gen total_time_days = latest_date-startdate
 
-
-//generate exposure variable 100000
+//generate exposure variable
 gen exposed = 1
 
-// Step 2: Duplicate each individual to create a matched unexposed pair
+/////////////Duplicate each individual to create a matched unexposed pair/////////////////////
+
 expand 2
 gen setid = "10" + string(patid)
 bysort setid: replace exposed = 0 if _n== _N
@@ -63,7 +65,7 @@ bysort setid: replace exposed = 0 if _n== _N
 // Step 3: Jitter age for unexposed individuals (by 3 yrs)
 replace age_start = age_start + rnormal(0, 3) if exposed == 0
 
-// Generate a random integer between 0 and total_time
+// Generate a random date for the indexdate for the exposed between between 0 and total_time
 gen itime = round(runiform() * total_time_days)
 
 gen indexdate = startdate + itime
@@ -75,7 +77,7 @@ replace indexdate=. if exposed==0
 * Tidy dataset
 order startdate, before(latest_date)
 
-//generate outcome data. maximum time is now stipulated by t_years (total time per row)
+///////////////////////////Generate outcome data/////////////////////////////////////////////////
 survsim stime outcome, dist(weib) lambda(1.19) gamma(0.012) cov(exposed 0 age_start 0 gender 0 pracid 0) maxtime(total_time_days) //ltruncated(t0_years) maxtime(t_years)
 
 
@@ -85,17 +87,17 @@ format outcomedate %td
 replace outcomedate=. if outcome==0
 
 
-//step 3: delete pairs where outcome happens before exposure
+////////////////Delete pairs where outcome happens before exposure////////////////////////////
 
 bysort setid: drop if exposed ==1 & outcomedate < indexdate //drop if exposure is before outcome
 bysort setid: drop if _N < 2 //drop matched pair
 
 
-//step 4: regenerate outcomes for unexposed that are before
-	// there is no indexdate for unexposed? so no need to regenerate?
+////////////////Regenerate outcomes for unexposed that are before////////////////////////////
+//No indexdate for unexposed? so no need to regenerate?
 
 
-// step 5: generate enddate
+// generate enddate
 egen enddate = rowmin(latest_date outcomedate)
 
 order patid dob yob age_start gender pracid ///
@@ -103,63 +105,15 @@ order patid dob yob age_start gender pracid ///
 	outcomedate  latest_date ///
 	exposed outcome enddate 
 
-	
+//////////////////////////////////////////ESTIMATES//////////////////////////////
 	qui stset enddate, origin(startdate) enter(indexdate) fail(outcome) /// 
 			id(patid) scale(365.25)
 			
 			stcox i.exposed, nohr
 			stcox i.exposed age_start gender pracid, nohr
 		
-			
-						capture { 
-			qui stcox i.exposed, nohr
-			return scalar base_uadj_est= r(table)[1,2] 
-			return scalar base_uadj_se= r(table)[2,2]
-			return scalar base_uadj_pval= r(table)[4,2]
-			return scalar base_uadj_lci= r(table)[5,2]
-			return scalar base_uadj_uci= r(table)[6,2]
-			}
-			
-			if _rc!=0 {
-				noi disp "No convergence achieved for base Cox unadjusted model in rep `i'"
-		    return scalar base_uadj_est= .
-			return scalar base_uadj_se= .
-			return scalar base_uadj_pval= .
-			return scalar base_uadj_lci= .
-			return scalar base_uadj_uci= .
-			}
-			
-			capture{
-			qui stcox i.exposed age_start gender pracid, nohr
-		
-			return scalar base_adj_est= r(table)[1,2] 
-			return scalar base_adj_se= r(table)[2,2] 
-			return scalar base_adj_pval= r(table)[4,2]
-			return scalar base_adj_lci= r(table)[5,2]
-			return scalar base_adj_uci= r(table)[6,2]
-			}
-			
-			if _rc!=0 {
-				noi disp "No convergence achieved for base Cox adjusted model in rep `i'"
-		    return scalar base_adj_est= .
-			return scalar base_adj_se= .
-			return scalar base_adj_pval= .
-			return scalar base_adj_lci= .
-			return scalar base_adj_uci= .
-			}
-			
-			drop _*
-		
-	    bysort patid: gen tag = _n == 1
-		count if tag 
-		return scalar total_n = r(N)
-		
 		save "bc_`i'_`conf_type'", replace
-		
 
-		
-
-				
 ///////
 
 program define matched_sim, rclass
