@@ -15,6 +15,7 @@ drop if getallpossible == "Base cohort"
 
 simsum theta, se(se) methodvar(method) id(rep_id) true($true) mcse format(%6.3f %6.1f %6.0f) bias empse modelse relerror cover listsep by(confounding ratio getallpossible) saving($resultsDir\sim_summary_simsummtch_${nsim}_${type}, replace)
 
+
 restore
 
 
@@ -24,9 +25,7 @@ drop if getallpossible != "Base cohort"
 
 simsum theta, se(se) methodvar(method) id(rep_id) true($true) mcse format(%6.3f %6.1f %6.0f) listsep bias empse modelse relerror cover by(confounding) saving($resultsDir\sim_summary_simsumbc_${nsim}_${type}, replace)
 
-
-
-
+restore
 
 use "$resultsDir\sim_summary_simsummtch_${nsim}_${type}", clear
 
@@ -34,7 +33,7 @@ use "$resultsDir\sim_summary_simsummtch_${nsim}_${type}", clear
 gen type = _n
 
 
-forvalues i = 3/8 {
+forvalues i = 5/16 {
 gen MCSE_low`i'= theta`i' - (1.96 * theta`i'_mcse)
 gen MCSE_hi`i'= theta`i' + (1.96 * theta`i'_mcse)
 
@@ -44,7 +43,10 @@ drop theta`i'_mcse
 
 reshape long theta MCSE_low MCSE_hi, i(type) j(method)
 
-label define methodlab 1 "base_uadj" 2 "base_adj"  3 "cox_uadj" 4 "cox_adj" 5 "cox_match" 6 "p_uadj" 7 "p_adj" 8"p_match"
+label define methodlab 1 "tbase_uadj" 2 "tbase_adj" 3 "abase_uadj" 4 "abase_adj" ///
+							5 "cox_uadj_a" 6 "cox_adj_a" 7 "cox_match_a" 8 "p_uadj_a" 9 "p_adj_a" 10 "p_match_a" ///
+							11 "cox_uadj_t" 12 "cox_adj_t" 13 "cox_match_t" 14 "p_uadj_t" 15 "p_adj_t" 16 "p_match_t"
+							
 label values method methodlab
 
 rename theta avg
@@ -70,7 +72,7 @@ use "$resultsDir\sim_summary_simsumbc_${nsim}_${type}", clear
 gen type = _n
 
 
-forvalues i = 1/2 {
+forvalues i = 1/4 {
 gen MCSE_low`i'= theta`i' - (1.96 * theta`i'_mcse)
 gen MCSE_hi`i'= theta`i' + (1.96 * theta`i'_mcse)
 
@@ -80,7 +82,10 @@ drop theta`i'_mcse
 
 reshape long theta MCSE_low MCSE_hi, i(type) j(method)
 
-label define methodlab 1 "base_uadj" 2 "base_adj"  3 "cox_uadj" 4 "cox_adj" 5 "cox_match" 6 "p_uadj" 7 "p_adj" 8"p_match"
+label define methodlab 1 "tbase_uadj" 2 "tbase_adj" 3 "abase_uadj" 4 "abase_adj" ///
+							5 "cox_uadj_a" 6 "cox_adj_a" 7 "cox_match_a" 8 "p_uadj_a" 9 "p_adj_a" 10 "p_match_a" ///
+							11 "cox_uadj_t" 12 "cox_adj_t" 13 "cox_match_t" 14 "p_uadj_t" 15 "p_adj_t" 16 "p_match_t"
+							
 label values method methodlab
 
 rename theta avg
