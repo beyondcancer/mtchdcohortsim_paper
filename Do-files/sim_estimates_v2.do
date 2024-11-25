@@ -14,12 +14,15 @@ foreach l in $conf_test {
 noi disp "Initiating the `type_ith' simulation loop, this is loop `l'"
 
  tempname bc_estimates rep_estimates	
- postfile `bc_estimates' float(nobs) str10 confounding int(rep_id) int(ratio) int(method) float(theta se lci uci pval) using bc_mysimestimates_`type_ith'_sim${nsim_start}_${nsim}.dta, replace	
-postfile `rep_estimates' str10 confounding str20 getallpossible int(rep_id) int(ratio) int(method) float(nomatch theta se lci uci pval) using rep_mysimestimates_`type_ith'_sim${nsim_start}_${nsim}.dta, replace 
+ postfile `bc_estimates' float(nobs) str20 confounding int(rep_id) int(ratio) int(method) float(theta se lci uci pval) using bc_mysimestimates_`type_ith'_sim${nsim_start}_${nsim}.dta, replace	
+postfile `rep_estimates' str20 confounding str20 getallpossible int(rep_id) int(ratio) int(method) float(nomatch theta se lci uci pval) using rep_mysimestimates_`type_ith'_sim${nsim_start}_${nsim}.dta, replace 
 
 tempname bc_states rep_states	
 postfile `bc_states' str10 confounding int(rep_id) str2000 bc1 str2000 bc2 str1000 bc3 using bc_mysimstates_`type_ith'_sim${nsim_start}_${nsim}, replace
 postfile `rep_states' str10 confounding int(rep_id) str20 implementation int(ratio) str2000 state1 str2000 state2 str1000 state3 using rep_mysimstates_`type_ith'_sim${nsim_start}_${nsim}.dta, replace ///figure this out later
+
+tempname cohort_deets
+postfile `cohort_deets' str20 confounding str20 getallpossible int(rep_id) int(ratio) int(n_set) int(median_set) int(set_25) int(set_75) float(full_sets) float(time_mtch) using rep_cohortdeets_`type_ith'_sim${nsim_start}_${nsim}.dta, replace
 
 forval i= $nsim_start/$nsim {	
 
@@ -72,10 +75,50 @@ foreach rep of global implementation {
 		post `rep_estimates' ("`type_ith'") ("`rep'") (`i') (`j') (15) (r(nomatch)) (r(p_adj_t_est))  (r(p_adj_t_se))  (r(p_adj_t_lci)) (r(p_adj_t_uci))  (r(p_adj_t_pval))
 		post `rep_estimates' ("`type_ith'") ("`rep'") (`i') (`j') (16) (r(nomatch)) (r(p_mtch_t_est))  (r(p_mtch_t_se))  (r(p_mtch_t_lci)) (r(p_mtch_t_uci))  (r(p_mtch_t_pval))
 	
+noi return list
+
+
+post `cohort_deets' ("`type_ith'") ("`rep'") (`i') (`j') (.) (.) (.) (.) (.) (r(mtch_time))
+
+use "temp_`i'`type_ith'`rep'.dta", clear
+
+//Number of controls per set
+* Count the number of unexposed individuals in each setid
+bysort setid: gen unexposed_count = sum(exposed == 0)
+bysort setid: gen setid_count = _N
+
+
+* Keep only the last observation per setid (representing the total count of unexposed in each setid)
+bysort setid: keep if _n==_N
+local total = _N
+disp `total'
+
+tab setid_count, matcell(freq) matrow(percent)  // Perform the tabulation and create matrices
+local rows = rowsof(freq)  // Get the total number of rows in the matrix
+// Save the total from the last row of the frequency matrix
+local total_count = freq[`rows', 1]
+
+local full_sets = (`total_count'/`total')*100 
+
+display "Total: " `full_sets'
+
+* Calculate the mean, 25th percentile, and 75th percentile of unexposed_count across all sets
+qui summarize unexposed_count, detail
+
 return list
+
+post `cohort_deets' ("`type_ith'") ("`rep'") (`i') (`j') (r(N)) (r(p50)) (r(p25)) (r(p75)) (`full_sets') (r(mtch_time))
+
+* Display results
+di "Mean: " r(mean)
+di "Median: " r(p50)
+di "25th percentile (p25): " r(p25)
+di "75th percentile (p75): " r(p75)
 
 noi disp "erasing `rep' `type_ith' matched cohort data"
 noi erase "getmatchedcohort`i'`type_ith'`rep'.dta"
+noi erase "temp_`i'`type_ith'`rep'.dta"
+
 
 }
 }
@@ -90,6 +133,7 @@ postclose `bc_states'
 postclose `rep_states'
 postclose `bc_estimates'
 postclose `rep_estimates'
+postclose `cohort_deets'
 
 use "bc_mysimestimates_`type_ith'_sim${nsim_start}_${nsim}", clear
 	

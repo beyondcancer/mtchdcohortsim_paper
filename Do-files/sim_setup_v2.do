@@ -1,30 +1,28 @@
 
 ////////////////////////////////////////////////////////
-/////////////// 11NOV 2024/////////////////////////////
-///////CHANGES AS PER MEETING WITH FIZZ/////////////////
+/////////////// 19NOV 2024/////////////////////////////
 ////////////////TWO TIMESCALES /////////////////////////
 ///////////////////////////////////////////////////////
-
+quietly{
 
 *Define programs to run 1 repetition
-
 cap program drop matched_sim
 cap program drop create_bc
 
+*create_bc program
 program define create_bc, rclass
 
 //version of stata
 version 17
 
-//Set default values for simulation parameters //LOOK AT STATS WITH JIM
+//Set default values for simulation parameters
 
-syntax [, nobs(int 100000) lambda_exp(real 0.001) gamma_exp(real 1.5) gamma_out(real 1.9) lambda_out(real 0.0003) loghr(real .0) gender_exp(real .0) pracid_exp(real .0) gender_out(real .0) pracid_out(real .0) i(int 1) conf_type(string)] 
+syntax [, nobs(int 100000) lambda_exp(real 0.0011) gamma_exp(real 1.5) gamma_out(real 1.9) lambda_out(real 0.0003) loghr(real .0) gender_exp(real .0) pracid_exp(real .0) gender_out(real .0) pracid_out(real .0) i(int 1) conf_type(string)] 
 
 clear
 
 //return random nuber state
 return local bc_state = c(rngstate)
-
 
 //set number of observations as per input to the program
 set obs `nobs'
@@ -74,7 +72,7 @@ gen yob= year(dob)
 gen age_exit = (latest_date - dob)/365.25
 
 //generate exposure variable changing exposure hazard for attained age by using age as timescale 
-noi di("lambda is: `lambda_exp', gamma is `gamma_exp'")
+noi di("Exposure generation: lambda is: `lambda_exp', gamma is `gamma_exp'")
 
 return local pre_state = c(rngstate)
 
@@ -87,12 +85,6 @@ survsim age_itime ever_exposed, dist(weibull) 					///
 gen indexdate = dob + (age_itime * 365.25)
 format indexdate %td "DDMMMYYYY"
 replace indexdate=. if ever_exposed==0
-
-// descriptive statistics for exposed
-tab ever_exposed
-
-* Check order of individual study entry, exposure, and study end date
-//assert startdate<= indexdate & indexdate <= latest_date if indexdate!=.
 
 * Tidy dataset
 drop  age_itime
@@ -108,24 +100,21 @@ order startdate, before(latest_date)
 
 // AIM: people who have a cancer diagnosis to have different hazards before and after cancer diagnosis
 
-
 //generate dummy failure variable to split exposure data
 gen fail=0
 
 //Stset data with age as underlying timescale
 gen late_date = latest_date
-stset late_date, enter(startdate) origin(startdate) failure(fail) id(patid) 
+qui stset late_date, enter(startdate) origin(startdate) failure(fail) id(patid) 
 
 // Split data at date of exposure (for those who become exposed)
 stsplit exposed, at(0) after(time=indexdate)
 
-//Recategorise exposure as 0 in time period of startdate to indexdate &  mark as unexposed in the 1st row
+//Recategorise exposure as 0 in time period of startdate to indexdate & mark as unexposed in the 1st row
 recode exposed 0=1 -1=0
 replace exposed = 0 if ever_exposed==0
 label define pre_post 0 "Pre-exposure" 1 "Post-exposure"
 label values exposed pre_post
-
-//assert _t0==0 if exposed==0 //check pre-exposure time-period starts at t=0 
 
 *Generate future time since study start time scale
 
@@ -137,25 +126,23 @@ gen age_entry     = (date_entry - dob)/365.25
 replace age_exit  = (date_exit - dob)/365.25
 
  * tidy unawanted variables
-//assert date_exit==late_date
 drop fail _* late_date
 order age_start, before(age_entry)
 order age_exit, after(age_entry) 
 
-noi di("lambda is: `lambda_out', gamma is `gamma_out'")
 //generate outcome variable with age as underlying timescale
+
+noi di("Outcome generation lambda is: `lambda_out', gamma is `gamma_out'")
+
 survsim age_stime outcome, dist(weib) 				///
 	lambda(`lambda_out') gamma(`gamma_out') 		///
 	cov(exposed `loghr' centre_gender `gender_out'  ///
 	centre_pracid `pracid_out') 					///
 	ltruncated(age_entry) maxtime(age_exit)
-	
- tab exposed outcome
- 
+	 
 
  // No longer need centred covariates
 drop centre*
-
 
 //generate the date the outcome occurs
 gen outcomedate = dob + (age_stime * 365.25)
@@ -165,7 +152,6 @@ replace outcomedate=. if outcome==0
 //Remove indexdate for the rows of unexposed time
 replace indexdate=. if exposed==0
 
-
 //Count the number of records and outcomes for each patient
 bysort patid (age_entry): gen row = _n 
 bysort patid: egen nout = sum(outcome)
@@ -174,7 +160,6 @@ bysort patid: egen nout = sum(outcome)
 bysort patid (age_entry): gen out_b4_dx = outcome[1]==1 
 
 //Necessary changes for the exposed pool:
-
 
 //Make sure that end date is 1 day before indexdate for row with unexposed time-period
 replace date_exit = date_exit - 1 if row==1 & ever_exposed==1 & exposed==0
@@ -194,20 +179,66 @@ format enddate %td
 drop row nout out_b4_dx
 drop age_entry age_exit age_stime
 
-* Check dates are in correct order
-assert startdate>=earliest_date
-assert indexdate>=startdate
-assert outcomedate>=startdate if exposed==0
-assert outcomedate<=latest_date if outcome==1
-
-
 order patid dob yob age_start gender pracid ///
 	startdate indexdate ///
 	outcomedate latest_date ///
 	exposed outcome enddate 
 
-// *TIME IN STUDY AS TIMESCALE
-	noi stset enddate, origin(startdate) enter(date_entry) fail(outcome) /// 
+	// ANALYTICAL MODELS FOR BASE COHORT
+	
+	// *AGE AS TIMESCALE	
+	qui stset enddate, origin(dob) enter(date_entry) fail(outcome) /// 
+			id(patid) scale(365.25)
+				
+						capture { 
+			qui  stcox i.exposed, nohr
+			return scalar abase_uadj_est= r(table)[1,2] 
+			return scalar abase_uadj_se= r(table)[2,2]
+			return scalar abase_uadj_pval= r(table)[4,2]
+			return scalar abase_uadj_lci= r(table)[5,2]
+			return scalar abase_uadj_uci= r(table)[6,2]
+			}
+			
+			if _rc!=0 {
+				noi disp "No convergence achieved for abase Cox unadjusted model in rep `i'"
+		    return scalar abase_uadj_est= .
+			return scalar abase_uadj_se= .
+			return scalar abase_uadj_pval= .
+			return scalar abase_uadj_lci= .
+			return scalar abase_uadj_uci= .
+			}
+			
+			return list 
+			capture{
+			qui stcox i.exposed i.gender i.pracid, nohr
+		
+			return scalar abase_adj_est= r(table)[1,2] 
+			return scalar abase_adj_se= r(table)[2,2] 
+			return scalar abase_adj_pval= r(table)[4,2]
+			return scalar abase_adj_lci= r(table)[5,2]
+			return scalar abase_adj_uci= r(table)[6,2]
+			}
+				
+			if _rc!=0 {
+				noi disp "No convergence achieved for abase Cox adjusted model in rep `i'"
+		    return scalar abase_adj_est= .
+			return scalar abase_adj_se= .
+			return scalar abase_adj_pval= .
+			return scalar abase_adj_lci= .
+			return scalar abase_adj_uci= .
+			}
+			
+			return list 
+			
+		// Create stsplit by age
+		stsplit age_group_base, every(5)
+			
+		drop _*	
+	
+	
+	// *TIME IN STUDY AS TIMESCALE
+
+	qui stset enddate, origin(startdate) enter(date_entry) fail(outcome) /// 
 			id(patid) scale(365.25)
 			
 				
@@ -230,7 +261,7 @@ order patid dob yob age_start gender pracid ///
 			}
 			
 			capture{
-			qui stcox i.exposed age_start i.gender i.pracid, nohr
+			qui stcox i.exposed i.age_group_base i.gender i.pracid, nohr
 		
 			return scalar tbase_adj_est= r(table)[1,2] 
 			return scalar tbase_adj_se= r(table)[2,2] 
@@ -248,52 +279,12 @@ order patid dob yob age_start gender pracid ///
 			return scalar tbase_adj_uci= .
 			}
 			
-			drop _*
-
-	// *AGE AS TIMESCALE
+		// Get rid of base cohort stsplit and stset variabes
+		drop age_group_base
+		stjoin
+		drop _*
 		
-	noi stset enddate, origin(dob) enter(date_entry) fail(outcome) /// 
-			id(patid) scale(365.25)
-			
-				
-						capture { 
-			qui  stcox i.exposed, nohr
-			return scalar abase_uadj_est= r(table)[1,2] 
-			return scalar abase_uadj_se= r(table)[2,2]
-			return scalar abase_uadj_pval= r(table)[4,2]
-			return scalar abase_uadj_lci= r(table)[5,2]
-			return scalar abase_uadj_uci= r(table)[6,2]
-			}
-			
-			if _rc!=0 {
-				noi disp "No convergence achieved for abase Cox unadjusted model in rep `i'"
-		    return scalar abase_uadj_est= .
-			return scalar abase_uadj_se= .
-			return scalar abase_uadj_pval= .
-			return scalar abase_uadj_lci= .
-			return scalar abase_uadj_uci= .
-			}
-			
-			capture{
-			qui stcox i.exposed i.gender i.pracid, nohr
-		
-			return scalar abase_adj_est= r(table)[1,2] 
-			return scalar abase_adj_se= r(table)[2,2] 
-			return scalar abase_adj_pval= r(table)[4,2]
-			return scalar abase_adj_lci= r(table)[5,2]
-			return scalar abase_adj_uci= r(table)[6,2]
-			}
-				
-			if _rc!=0 {
-				noi disp "No convergence achieved for abase Cox adjusted model in rep `i'"
-		    return scalar abase_adj_est= .
-			return scalar abase_adj_se= .
-			return scalar abase_adj_pval= .
-			return scalar abase_adj_lci= .
-			return scalar abase_adj_uci= .
-			}
-			
-		drop _*	
+		//Count total number of patients in data
 	    bysort patid: gen tag = _n == 1
 		count if tag 
 		return scalar total_n = r(N)
@@ -301,10 +292,10 @@ order patid dob yob age_start gender pracid ///
 		save "bc_`i'_`conf_type'", replace
 		
 end 
-
 				
 ///////
 
+// Matching program
 program define matched_sim, rclass
 version 17
 
@@ -312,11 +303,14 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
              
 			qui use "bc_`i'_`conf_type'", clear
 
-			if "`getallpossible'" == "noreplacement"{	
+	//No replacement
+	if "`getallpossible'" == "noreplacement"{	
 				
 			qui return local state_`getallpossible'_`ratio' = c(rngstate)
 
-			
+	// Count time it takes to run getmatchedcohort program
+timer on 1
+		
 			 getmatchedcohort, cprddb(gold) practice gender yob yobwindow(1) ctrlsperexp(`ratio') savedir($workdir) filesuffix(`i'`conf_type'`getallpossible') followup dontcheck
 			
 			qui use "getmatchedcohort`i'`conf_type'`getallpossible'"
@@ -326,12 +320,24 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			qui keep if _merge==3 
 			
 			qui gen age_index= (indexdate-dob)/365.25
+			
+			save "temp_`i'`conf_type'`getallpossible'.dta", replace
+			
+timer off 1
+noi disp "Elapsed time for getmatchedcohort in rep `i': "
+timer list  
+return scalar mtch_time = r(t1)
+timer clear 1
+
 			}
 				
-			if "`getallpossible'" == "replacement"{
+	//Replacement
+
+				if "`getallpossible'" == "replacement"{
 				
 			qui return local state_`getallpossible'_`ratio' = c(rngstate) 
 			
+timer on 1			
 			 getmatchedcohort, cprddb(gold) practice gender yob yobwindow(1) savedir($workdir) getallpossible filesuffix(`i'`conf_type'`getallpossible') followup dontcheck
 				
 			qui use "getmatchedcohort`i'`conf_type'`getallpossible'"
@@ -339,24 +345,39 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			qui merge m:1 patid exposed using "bc_`i'_`conf_type'" 
 			
 			qui keep if _merge==3 
-							
+			
+			// only keep the amount of matches we need
 				gen count=`ratio'+1
 				gen rand = runiform()
 				gsort setid -exposed  rand
 				by setid, sort: keep if exposed==1| _n<=count
 			    gen og_patid= patid
 				replace patid = _n
+				
+			save "temp_`i'`conf_type'`getallpossible'.dta", replace
 			
-			 gen age_index= (indexdate-dob)/365.25
+timer off 1
+noi disp "Elapsed time for getmatchedcohort in rep `i': "
+timer list  
+return scalar mtch_time = r(t1)
+
+timer clear 1
+
+			gen age_index= (indexdate-dob)/365.25
+			 
+
 			}
 				
-			*Step 3: Calculate the hr for each type of model// adjustment
+			*ANALYTICAL MODELS FOR MATCHED COHORT ANALYS@IS
 
-
-			*Cox regressions stset data* *AGE AS TIMESCALE*
-			*NO ADJUSTMENT FOR AGE IN MODEL*
+			*AGE AS TIMESCALE*
 			qui stset enddate, origin(dob) enter(indexdate) fail(outcome) id(patid) scale(365.25)
-
+			
+			//split data by age 
+			* Use stsplit to split the data (every 5 years of age)
+			stsplit age_group, every(5)
+			gen y_age = _t - _t0
+			
 			*unadjusted
 			capture { 
 			qui stcox i.exposed, nohr
@@ -368,7 +389,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			}
 			
 			if _rc!=0 {
-				noi disp "No convergence achieved for Cox unadjusted model in rep `i'"
+				noi disp "No convergence achieved for Cox unadjusted model in rep `i' (age as timescale)"
 		    return scalar cox_uadj_a_est= .
 			return scalar cox_uadj_a_se= .
 			return scalar cox_uadj_a_pval= .
@@ -387,7 +408,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			
 			}
 						if _rc!=0 {
-				noi disp "No convergence achieved for Cox adjusted model in rep `i'"
+				noi disp "No convergence achieved for Cox adjusted model in rep `i' (age as timescale)"
 			return scalar cox_adj_a_est= .
 			return scalar cox_adj_a_se= .
 			return scalar cox_adj_a_pval= .
@@ -406,7 +427,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			}
 			
 						if _rc!=0 {
-				noi disp "No convergence achieved for Cox adjusted model in rep `i'"
+				noi disp "No convergence achieved for Cox adjusted model in rep `i' (age as timescale)"
 				return scalar cox_mtch_a_est= .
 				return scalar cox_mtch_a_se= .
 				return scalar cox_mtch_a_pval= .
@@ -419,7 +440,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			*Poisson regressions
 				*unadjusted
 			capture {
-			qui streg  i.exposed, dist(exp) nohr
+			qui streg  i.exposed i.age_group, dist(exp) nohr
 			return scalar p_uadj_a_est= r(table)[1,2]
 			return scalar p_uadj_a_se= r(table)[2,2]
 			return scalar p_uadj_a_pval= r(table)[4,2]
@@ -428,7 +449,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			}
 			
 						if _rc!=0 {
-				noi disp "No convergence achieved for Poisson unadjusted model in rep `i'"
+				noi disp "No convergence achieved for Poisson unadjusted model in rep `i' (age as timescale)"
 			return scalar p_uadj_a_est= .
 			return scalar p_uadj_a_se= .
 			return scalar p_uadj_a_pval= .
@@ -438,7 +459,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			
 			*adjusted for matching variables 
 			capture {
-			 qui streg  i.exposed i.gender i.pracid, dist(exp) nohr
+			 qui streg  i.exposed i.gender i.pracid i.age_group, dist(exp) nohr
 			return scalar p_adj_a_est= r(table)[1,2]
 			return scalar p_adj_a_se= r(table)[2,2]
 			return scalar p_adj_a_pval= r(table)[4,2]
@@ -446,7 +467,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			return scalar p_adj_a_uci= r(table)[6,2]
 			}
 									if _rc!=0 {
-				noi disp "No convergence achieved for Poisson adjusted model in rep `i'"
+				noi disp "No convergence achieved for Poisson adjusted model in rep `i' (age as timescale)"
 				return scalar p_adj_a_est= .
 				return scalar p_adj_a_se= .
 				return scalar p_adj_a_pval= .
@@ -458,7 +479,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			
 			capture { 
 	
-			qui xtpois _d i.exposed, fe i(setid) 
+			qui xtpois _d i.exposed i.age_group, fe i(setid) exp(y_age)
 			return scalar p_mtch_a_est= r(table)[1,2]
 			return scalar p_mtch_a_se= r(table)[2,2]
 			return scalar p_mtch_a_pval= r(table)[4,2]
@@ -467,25 +488,24 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			}
 			
 						if _rc!=0 {
-				noi disp "No convergence achieved for Poisson conditional model in rep `i'"
+				noi disp "No convergence achieved for Poisson conditional model in rep `i' (age as timescale)"
 				return scalar p_mtch_a_est= .
 				return scalar p_mtch_a_se= .
 				return scalar p_mtch_a_pval= .
 				return scalar p_mtch_a_lci= .
 				return scalar p_mtch_a_uci= .
 			}	
-			return list
 			
-			
-			//split data by age 
-			* Use stsplit to split the data at the specified age groups
-			stsplit age_group, every(5)
-			gen y = _t - _t0
-			
+			//drop age as timescale stset vars
 			drop _*
 			
-			*Cox regressions stset data* *STUDYTIME* AS TIMESCALE
+			*TIME IN STUDY AS TIMESCALE*
 			qui stset enddate, origin(indexdate) enter(indexdate) fail(outcome) id(patid) scale(365.25)
+			
+			// create stsplit for time in study (every year of follow up)
+			stsplit survival, every(1)
+			gen y_surv = _t - _t0
+			
 
 			*unadjusted
 			capture { 
@@ -498,7 +518,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			}
 			
 			if _rc!=0 {
-				noi disp "No convergence achieved for Cox unadjusted model in rep `i'"
+				noi disp "No convergence achieved for Cox unadjusted model in rep `i' (survival as timescale)"
 		    return scalar cox_uadj_t_est= .
 			return scalar cox_uadj_t_se= .
 			return scalar cox_uadj_t_pval= .
@@ -508,7 +528,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			
 			*adjusted for matching variables
 			capture { 
-			qui stcox i.exposed age_index i.gender i.pracid, nohr 
+			qui stcox i.exposed i.gender i.pracid i.age_group, nohr 
 			return scalar cox_adj_t_est= r(table)[1,2] 
 			return scalar cox_adj_t_se= r(table)[2,2]
 			return scalar cox_adj_t_pval= r(table)[4,2]
@@ -517,7 +537,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			
 			}
 						if _rc!=0 {
-				noi disp "No convergence achieved for Cox adjusted model in rep `i'"
+				noi disp "No convergence achieved for Cox adjusted model in rep `i' (survival as timescale)"
 			return scalar cox_adj_t_est= .
 			return scalar cox_adj_t_se= .
 			return scalar cox_adj_t_pval= .
@@ -527,7 +547,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			
 			*adjusted by matched set
 			capture { 
-			qui stcox i.exposed, strata(setid) nohr
+			qui stcox i.exposed i.age_group, strata(setid) nohr
 			return scalar cox_mtch_t_est= r(table)[1,2]
 			return scalar cox_mtch_t_se= r(table)[2,2]
 			return scalar cox_mtch_t_pval= r(table)[4,2]
@@ -536,7 +556,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			}
 			
 						if _rc!=0 {
-				noi disp "No convergence achieved for Cox adjusted model in rep `i'"
+				noi disp "No convergence achieved for Cox adjusted model in rep `i' (survival as timescale)"
 				return scalar cox_mtch_t_est= .
 				return scalar cox_mtch_t_se= .
 				return scalar cox_mtch_t_pval= .
@@ -549,7 +569,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			*Poisson regressions
 				*unadjusted
 			capture {
-			qui streg  i.exposed i.age_group, dist(exp) nohr
+			qui streg  i.exposed i.survival i.age_group, dist(exp) nohr
 			return scalar p_uadj_t_est= r(table)[1,2]
 			return scalar p_uadj_t_se= r(table)[2,2]
 			return scalar p_uadj_t_pval= r(table)[4,2]
@@ -558,7 +578,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			}
 			
 						if _rc!=0 {
-				noi disp "No convergence achieved for Poisson unadjusted model in rep `i'"
+				noi disp "No convergence achieved for Poisson unadjusted model in rep `i' (survival as timescale)"
 			return scalar p_uadj_t_est= .
 			return scalar p_uadj_t_se= .
 			return scalar p_uadj_t_pval= .
@@ -568,7 +588,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			
 			*adjusted for matching variables 
 			capture {
-			 qui streg  i.exposed gender pracid i.age_group, dist(exp) nohr
+			 qui streg  i.exposed gender pracid i.survival i.age_group, dist(exp) nohr
 			return scalar p_adj_t_est= r(table)[1,2]
 			return scalar p_adj_t_se= r(table)[2,2]
 			return scalar p_adj_t_pval= r(table)[4,2]
@@ -576,7 +596,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			return scalar p_adj_t_uci= r(table)[6,2]
 			}
 									if _rc!=0 {
-				noi disp "No convergence achieved for Poisson adjusted model in rep `i'"
+				noi disp "No convergence achieved for Poisson adjusted model in rep `i' (survival as timescale)"
 				return scalar p_adj_t_est= .
 				return scalar p_adj_t_se= .
 				return scalar p_adj_t_pval= .
@@ -588,7 +608,7 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			
 			capture { 
 	
-			qui xtpois _d i.exposed i.age_group, fe i(setid) exp(y)
+			qui xtpois _d i.exposed i.age_group i.survival, fe i(setid) exp(y_surv)
 			return scalar p_mtch_t_est= r(table)[1,2]
 			return scalar p_mtch_t_se= r(table)[2,2]
 			return scalar p_mtch_t_pval= r(table)[4,2]
@@ -597,17 +617,17 @@ syntax [, getallpossible(string) ratio(int 5) i(int 1) conf_type(string)]
 			}
 			
 						if _rc!=0 {
-				noi disp "No convergence achieved for Poisson conditional model in rep `i'"
+				noi disp "No convergence achieved for Poisson conditional model in rep `i' (survival as timescale)"
 				return scalar p_mtch_t_est= .
 				return scalar p_mtch_t_se= .
 				return scalar p_mtch_t_pval= .
 				return scalar p_mtch_t_lci= .
 				return scalar p_mtch_t_uci= .
 			}	
-			return list
+			//drop stset vars 
 			drop _*
 			
 
 end
 
-
+}
