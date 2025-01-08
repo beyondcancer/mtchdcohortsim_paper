@@ -8,4 +8,4 @@ Performance measures: Once estimates are obtained, use these dofiles to combine 
 Graphs: Outputs graphs to visualise the data
 
 
-sim one_rep_v2: produces km graphs by exposure status, for a large 1 million sample of one base cohort
+sim one_rep_v2: produces km graphs by exposure status, for a large 1 million sample of one base cohort by underlying timescale and for each different DGM (exposure prevalence and confounding level)
