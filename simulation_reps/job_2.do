@@ -1,4 +1,4 @@
-
+// SCENARIO: 10% EXPOSURE, MINIMAL CONFOUNDING
 clear
 
 
@@ -34,7 +34,7 @@ global conf_test 1
 global conf_expbi 0.93 
 global conf_expmult 0.039  
 global conf_outbi 0.672
-global conf_outmult	0.288 
+global conf_outmult 0.288 
 global conf_type 10_sconf
 
 //SET-UP the simulation programs
