@@ -1,6 +1,6 @@
+// SCENARIO: 1% EXPOSURE PREVALENCE, STRONG CONFOUNDING
 
 clear
-
 
 cd $workdir
 
@@ -30,7 +30,6 @@ global gamma_out 1.9
 
 // SET-UP covariate parameters
 global conf_test 1
-
 global conf_expbi 1.609 
 global conf_expmult 0.223 
 global conf_outbi 1.386 
@@ -42,4 +41,3 @@ do sim_setup_v2.do
 
 ///RUN SIM///
 do sim_estimates_v2.do
-
