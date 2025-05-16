@@ -1,6 +1,6 @@
+// SCENARIO: 1% EXPOSURE PREVALENCE, MINIMAL CONFOUNDING
 
 clear
-
 
 cd $workdir
 
@@ -41,4 +41,3 @@ do sim_setup_v2.do
 
 ///RUN SIM///
 do sim_estimates_v2.do
-
