@@ -1,8 +1,6 @@
 // SCENARIO: 10% EXPOSURE, MINIMAL CONFOUNDING
 clear
 
-
-
 cd $workdir
 
 //SET-UP the sim states
@@ -42,4 +40,3 @@ do sim_setup_v2.do
 
 ///RUN SIM///
 do sim_estimates_v2.do
-
