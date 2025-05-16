@@ -12,7 +12,7 @@ set seed 88
 
 //number of simulations
 global nsim_start = 1 // where the job will start from
-global nsim = 20 //number of simulations in the loop for the number of base cohorts to be created
+global nsim = 2000 //number of simulations in the loop for the number of base cohorts to be created
 
 //SET-UP the DGM parameters
 global n = 100000  //number of observations in each cohort
