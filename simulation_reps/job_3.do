@@ -1,9 +1,5 @@
-
+// SCENARIO: 10% EXPOSURE PREVALENCE, STRONG CONFOUNDING
 clear
-
-
-
-
 
 cd $workdir
 
