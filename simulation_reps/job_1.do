@@ -1,5 +1,5 @@
 
-
+// SCENARIO: 10% EXPOSURE PREVALENCE, NO CONFOUNDING
 clear
 
 
@@ -29,7 +29,7 @@ global gamma_exp 1.5
 global lambda_out 0.0003 
 global gamma_out 1.9 
 
-// SET-UP covariate parameters
+// SET-UP covariate parameters 
 global conf_test 1
 global conf_expbi 0
 global conf_expmult 0
